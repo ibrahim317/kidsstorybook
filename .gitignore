@@ -1,42 +1,116 @@
-# Android generated files
-.gradle
-build/
-app/build/
+# Built application files
 *.apk
 *.aar
 *.ap_
+*.aab
 
-# Android Studio files
-.idea/
-*.iml
+# Files for the ART/Dalvik VM
+*.dex
 
-# Local configuration files
+# Java class files
+*.class
+
+# Generated files
+bin/
+gen/
+out/
+
+# Gradle files
+.gradle/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
 local.properties
 
-# Log files
-*.log
-
-# macOS files
+# Android Studio
+*.iml
+.idea/
 .DS_Store
+*.hprof
+.navigation/
+output.json
 
-# Temporary files created by Android Studio
+# Keystore files
+*.jks
+*.keystore
+
+# Google Services (e.g. APIs or Firebase)
+google-services.json
+
+# Android Profiling
+*.hprof
+
+# Version control
+vcs.xml
+
+# lint
+lint/intermediates/
+lint/generated/
+lint/outputs/
+lint/tmp/
+
+# Android Studio captures folder
 captures/
 
-# Gradle cache
-.gradle/
+# Kotlin
+*.kotlin_module
 
-# Ignore any user-specific files
+# Local configuration file
+local.properties
+
+# Proguard folder
+proguard/
+
+# Log Files
+*.log
+
+# Android Studio Navigation editor temp files
+.navigation/
+
+# Android Studio captures folder
+captures/
+
+# IntelliJ
+*.iml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/jarRepositories.xml
+.idea/compiler.xml
+.idea/misc.xml
+.idea/modules.xml
+.idea/vcs.xml
+.idea/jsLibraryMappings.xml
+.idea/datasources.xml
+.idea/dataSources.ids
+.idea/sqlDataSources.xml
+.idea/dynamic.xml
+.idea/uiDesigner.xml
+.idea/qodana.xml
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Temporary files
 *.swp
 *.swo
-
-# Ignore compiled native libraries
-*.so
-
-# Ignore any backup files
 *~
-
-# Ignore any files in the app's cache directory
-app/cache/
-
-# Ignore any files in the app's temporary directory
-app/temp/
