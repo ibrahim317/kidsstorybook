@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Kids Story Book</string>
+    <string name="choose_language">Choose Language</string>
+    <string name="close">Close</string>
+    <string name="show_lion_story">Show Lion Story</string>
+    <string name="listen_lion_story">Listen to Lion Story</string>
+    <string name="show_cinderella_story">Show Cinderella Story</string>
+    <string name="listen_cinderella_story">Listen to Cinderella Story</string>
+</resources> 

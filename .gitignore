@@ -1,0 +1,42 @@
+# Android generated files
+.gradle
+build/
+app/build/
+*.apk
+*.aar
+*.ap_
+
+# Android Studio files
+.idea/
+*.iml
+
+# Local configuration files
+local.properties
+
+# Log files
+*.log
+
+# macOS files
+.DS_Store
+
+# Temporary files created by Android Studio
+captures/
+
+# Gradle cache
+.gradle/
+
+# Ignore any user-specific files
+*.swp
+*.swo
+
+# Ignore compiled native libraries
+*.so
+
+# Ignore any backup files
+*~
+
+# Ignore any files in the app's cache directory
+app/cache/
+
+# Ignore any files in the app's temporary directory
+app/temp/
