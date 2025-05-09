@@ -2,10 +2,9 @@
 
 package com.example.kidsstorybook
 
+import android.content.Context
+import android.media.MediaPlayer
 import android.os.Bundle
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
@@ -15,283 +14,403 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.sp 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.outlined.FavoriteBorder
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions 
+import androidx.compose.foundation.text.KeyboardOptions // Added import
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.ImeAction // Added import
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.core.view.WindowCompat
-import com.example.kidsstorybook.model.Story
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.material3.LocalContentColor
+
+// Define ContentAlpha since it's not available in Material3
+object ContentAlpha {
+    const val high = 1.0f
+    const val medium = 0.74f
+    const val disabled = 0.38f
+}
 
 class MainActivity : ComponentActivity() {
-    private lateinit var storyManager: StoryManager
-    private lateinit var webView: WebView
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        // Modern fullscreen handling
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = android.graphics.Color.TRANSPARENT
         window.navigationBarColor = android.graphics.Color.TRANSPARENT
         
-        storyManager = StoryManager()
-        // enableEdgeToEdge()
-        
         setContent {
-            MaterialTheme {
+            MaterialTheme { // Consider using KidsStoryBookTheme if defined and customized
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    WebViewScreen()
+                    AppNavigation()
                 }
             }
         }
     }
+}
 
-    @Composable
-    fun WebViewScreen() {
-        AndroidView(
-            factory = { context ->
-                WebView(context).apply {
-                    webViewClient = WebViewClient()
-                    settings.apply {
-                        javaScriptEnabled = true
-                        domStorageEnabled = true
-                        setSupportZoom(true)
-                        loadWithOverviewMode = true
-                        useWideViewPort = true
-                        mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
-                    }
-                    loadUrl("https://www.twinkl.com.sa/resources/arabic/egypt-ebooks/stories-multiple-languages")
-                }.also { webView = it }
-            },
-            modifier = Modifier.fillMaxSize()
-        )
+object NavRoutes {
+    const val LANGUAGE_SELECT = "language_select"
+    const val STORY_LIST = "story_list/{language}"
+    const val STORY_DETAIL = "story_detail/{language}/{storyId}"
+
+    fun storyListRoute(language: String) = STORY_LIST.replace("{language}", language)
+    fun storyDetailRoute(language: String, storyId: Int) = STORY_DETAIL.replace("{language}", language).replace("{storyId}", storyId.toString())
     }
 
-    override fun onDestroy() {
-        if (::webView.isInitialized) {
-            webView.destroy()
+    @Composable
+fun AppNavigation() {
+    val navController = rememberNavController()
+    // Use mutableStateListOf for stories to make modifications (like favorite) observable
+    val stories = remember { mutableStateListOf(*getStories().toTypedArray()) }
+
+    NavHost(navController = navController, startDestination = NavRoutes.LANGUAGE_SELECT) {
+        composable(NavRoutes.LANGUAGE_SELECT) {
+            LanguageSelectScreen(navController = navController)
         }
-        super.onDestroy()
+        composable(
+            route = NavRoutes.STORY_LIST,
+            arguments = listOf(navArgument("language") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val language = backStackEntry.arguments?.getString("language") ?: "en"
+            StoryListScreen(navController = navController, language = language, stories = stories)
+        }
+        composable(
+            route = NavRoutes.STORY_DETAIL,
+            arguments = listOf(
+                navArgument("language") { type = NavType.StringType },
+                navArgument("storyId") { type = NavType.IntType }
+            )
+        ) { backStackEntry ->
+            val language = backStackEntry.arguments?.getString("language") ?: "en"
+            val storyId = backStackEntry.arguments?.getInt("storyId") ?: -1
+            // Find story from the potentially modified list
+            val story = stories.find { it.id == storyId }
+            if (story != null) {
+                StoryDetailScreen(navController = navController, story = story, language = language)
+            } else {
+                // This can happen if storyId is invalid or story removed from list
+                Column(modifier = Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Story not found or an error occurred.")
+                    Button(onClick = { navController.popBackStack(NavRoutes.LANGUAGE_SELECT, false) }) {
+                        Text("Go to Language Selection")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LanguageSelectScreen(navController: NavController) {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Select Language") }) }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Button(onClick = { navController.navigate(NavRoutes.storyListRoute("ar")) }) {
+                Text("اللغة العربية")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { navController.navigate(NavRoutes.storyListRoute("en")) }) {
+                Text("English")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { navController.navigate(NavRoutes.storyListRoute("tr")) }) {
+                Text("Turkish")
+            }
+        }
     }
 }
 
 @Composable
 fun StoryListScreen(
-    stories: List<Story>,
-    onStoryClick: (Story) -> Unit,
-    onFavoriteToggle: (Story) -> Unit
+    navController: NavController,
+    language: String,
+    stories: List<Story> // Changed to List<Story> as mutableStateListOf is a List
 ) {
-    var searchQuery by remember { mutableStateOf("") }
-    var showFavoritesOnly by remember { mutableStateOf(false) }
-
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
         topBar = {
-            Column {
                 TopAppBar(
-                    title = { Text("Kids Story Book") },
-                    actions = {
-                        IconButton(onClick = { showFavoritesOnly = !showFavoritesOnly }) {
-                            Icon(
-                                imageVector = if (showFavoritesOnly)
-                                    Icons.Filled.Favorite
-                                else
-                                    Icons.Outlined.FavoriteBorder,
-                                contentDescription = "Toggle Favorites"
-                            )
-                        }
-                    }
-                )
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-        }
-    ) { innerPadding ->
-        val filteredStories = remember(searchQuery, showFavoritesOnly, stories) {
-            var result = stories
-            if (showFavoritesOnly) {
-                result = result.filter { it.isFavorite }
-            }
-            if (searchQuery.isNotBlank()) {
-                result = result.filter { 
-                    it.title.contains(searchQuery, ignoreCase = true) ||
-                    it.content.contains(searchQuery, ignoreCase = true)
-                }
-            }
-            result
-        }
-
-        StoryList(
-            stories = filteredStories,
-            onStoryClick = onStoryClick,
-            onFavoriteToggle = onFavoriteToggle,
-            modifier = Modifier.padding(innerPadding)
-        )
-    }
-}
-
-@Composable
-fun StoryDetailScreen(
-    story: Story,
-    onBackClick: () -> Unit
-) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(story.title) },
+                title = { Text(getLanguageTitle(language)) },
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Back"
-                        )
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                     }
                 }
             )
         }
     ) { innerPadding ->
-        StoryWebView(
-            story = story,
-            modifier = Modifier.padding(innerPadding)
-        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp), // Only horizontal padding for list, vertical via spacedBy
+            contentPadding = PaddingValues(vertical = 16.dp), // Padding for top and bottom of the list
+            verticalArrangement = Arrangement.spacedBy(12.dp) // Increased spacing
+        ) {
+            items(stories, key = { it.id }) { story -> // Added key for better performance
+                StoryCard(
+                    story = story,
+                    language = language,
+                    onClick = {
+                        navController.navigate(NavRoutes.storyDetailRoute(language, story.id))
+                    },
+                    onFavoriteClick = {
+                        story.isFavorite = !story.isFavorite // Toggle the state
+                    }
+                )
+            }
+        }
     }
 }
 
 @Composable
-fun StoryWebView(
+fun StoryDetailScreen(
+    navController: NavController,
     story: Story,
-    modifier: Modifier = Modifier
+    language: String
 ) {
-    AndroidView(
-        modifier = modifier.fillMaxSize(),
-        factory = { context ->
-            WebView(context).apply {
-                webViewClient = WebViewClient()
-                settings.apply {
-                    javaScriptEnabled = true
-                    domStorageEnabled = true
-                    setSupportZoom(true)
+    val context = LocalContext.current
+    var currentImageIndex by remember { mutableStateOf(0) }
+    var isPlaying by remember { mutableStateOf(false) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    val imagePaths = when (language) {
+        "ar" -> story.arabicImagePaths
+        "en" -> story.englishImagePaths
+        "tr" -> story.turkishImagePaths
+        else -> story.englishImagePaths
+    }
+
+    val audioPath = when (language) {
+        "ar" -> story.arabicAudioPath
+        "en" -> story.englishAudioPath
+        "tr" -> story.turkishAudioPath
+        else -> story.englishAudioPath
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            mediaPlayer?.apply {
+                if (this.isPlaying) { // Check property directly
+                    stop()
+                }
+                release()
+            }
+            mediaPlayer = null
+            isPlaying = false // Reset isPlaying state
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(getLocalizedTitle(story, language)) },
+                navigationIcon = {
+                    IconButton(onClick = {
+                        mediaPlayer?.release() // Release media player on back press
+                        mediaPlayer = null
+                        isPlaying = false
+                        navController.popBackStack()
+                    }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (imagePaths.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.1f))
+                ) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data("file:///android_asset/${imagePaths[currentImageIndex]}")
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Story image ${currentImageIndex + 1}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Fit
+                    )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (currentImageIndex > 0) currentImageIndex--
+                        },
+                        enabled = currentImageIndex > 0
+                    ) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Previous")
+                    }
+
+                    Text("${currentImageIndex + 1}/${imagePaths.size}")
+
+                    IconButton(
+                        onClick = {
+                            if (currentImageIndex < imagePaths.size - 1) currentImageIndex++
+                        },
+                        enabled = currentImageIndex < imagePaths.size - 1
+                    ) {
+                        Icon(Icons.Default.ArrowForward, contentDescription = "Next")
+                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("No images available for this story.")
                 }
             }
-        },
-        update = { webView ->
-            val htmlContent = """
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <style>
-                        body {
-                            font-family: Arial, sans-serif;
-                            padding: 16px;
-                            line-height: 1.6;
-                            font-size: 16px;
-                            max-width: 800px;
-                            margin: 0 auto;
-                        }
-                        h1 {
-                            color: #333;
-                            text-align: center;
-                            margin-bottom: 24px;
-                        }
-                        .content {
-                            margin-top: 20px;
-                            text-align: justify;
-                        }
-                        .language-buttons {
-                            display: flex;
-                            justify-content: center;
-                            gap: 10px;
-                            margin: 20px 0;
-                            flex-wrap: wrap;
-                        }
-                        button {
-                            padding: 8px 16px;
-                            border: 1px solid #ccc;
-                            border-radius: 4px;
-                            background: #fff;
-                            cursor: pointer;
-                            transition: all 0.3s ease;
-                        }
-                        button:hover {
-                            background: #f0f0f0;
-                        }
-                        button.active {
-                            background: #e0e0e0;
-                            border-color: #999;
-                        }
-                        @media (max-width: 600px) {
-                            body {
-                                font-size: 14px;
-                                padding: 12px;
-                            }
-                            h1 {
-                                font-size: 24px;
-                            }
-                        }
-                    </style>
-                </head>
-                <body>
-                    <h1>${story.title}</h1>
-                    <div class="language-buttons">
-                        <button onclick="changeLanguage('en')" class="active">English</button>
-                        <button onclick="changeLanguage('ar')">العربية</button>
-                        <button onclick="changeLanguage('tr')">Türkçe</button>
-                    </div>
-                    <div id="content" class="content">
-                        ${story.content}
-                    </div>
-                    <script>
-                        function changeLanguage(lang) {
-                            const content = document.getElementById('content');
-                            const stories = {
-                                en: `${story.content}`,
-                                ar: `${story.arabicContent}`,
-                                tr: `${story.turkishContent}`
-                            };
-                            content.textContent = stories[lang];
-                            document.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-                            event.target.classList.add('active');
-                            
-                            // Update text direction for Arabic
-                            if (lang === 'ar') {
-                                content.style.direction = 'rtl';
-                                content.style.textAlign = 'right';
+
+
+            audioPath?.let { path ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (isPlaying) {
+                                mediaPlayer?.pause()
+                                isPlaying = false
                             } else {
-                                content.style.direction = 'ltr';
-                                content.style.textAlign = 'left';
+                                if (mediaPlayer == null) {
+                                    mediaPlayer = MediaPlayer().apply {
+                                        try {
+                                            val afd = context.assets.openFd(path)
+                                            setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                                            prepareAsync() // Use prepareAsync for non-blocking UI
+                                            setOnPreparedListener { mp ->
+                                                mp.start()
+                                                isPlaying = true
+                                            }
+                                            setOnCompletionListener {
+                                                isPlaying = false
+                                                // Optional: reset to start or clean up
+                                                // mediaPlayer?.seekTo(0)
+                                            }
+                                            setOnErrorListener { mp, what, extra ->
+                                                // Handle errors
+                                                isPlaying = false
+                                                mediaPlayer?.release()
+                                                mediaPlayer = null
+                                                true // True if the error has been handled
+                                            }
+                                        } catch (e: Exception) {
+                                            e.printStackTrace()
+                                            isPlaying = false
+                                            // Clean up if initialization failed
+                                            mediaPlayer?.release()
+                                            mediaPlayer = null
+                                        }
+                                    }
+                                } else {
+                                    mediaPlayer?.start()
+                                    isPlaying = true
+                                }
                             }
                         }
-                    </script>
-                </body>
-                </html>
-            """.trimIndent()
-            webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
+                    ) {
+                        Icon(
+                            if (isPlaying) Icons.Default.Lock else Icons.Default.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play"
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            mediaPlayer?.apply {
+                                if (this.isPlaying) { // Check property directly
+                                    stop()
+                                }
+                                // After stop, MediaPlayer must be prepared again to play
+                                try {
+                                    prepareAsync() // Or prepare() if you handle threading
+                                    // seekTo(0) // Reset to beginning
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                    // If prepare fails, release and nullify
+                                    release()
+                                    mediaPlayer = null
+                                }
+                                isPlaying = false
+                            }
+                        },
+                        enabled = mediaPlayer != null
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Stop")
+                    }
+                }
+            } ?: run {
+                Text("No audio available for this story.", modifier = Modifier.padding(vertical = 8.dp))
+            }
         }
-    )
+    }
 }
 
+// StoryWebView has been removed
+
 @Composable
-fun StoryList(
+fun StoryList( // This composable is defined but not used in the primary navigation flow.
     stories: List<Story>,
+    language: String, // Added language parameter
     onStoryClick: (Story) -> Unit,
     onFavoriteToggle: (Story) -> Unit,
     modifier: Modifier = Modifier
@@ -309,9 +428,10 @@ fun StoryList(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(stories) { story ->
+            items(stories,  key = { it.id }) { story ->
                 StoryCard(
                     story = story,
+                    language = language, // Pass language to StoryCard
                     onClick = { onStoryClick(story) },
                     onFavoriteClick = { onFavoriteToggle(story) }
                 )
@@ -323,41 +443,38 @@ fun StoryList(
 @Composable
 fun StoryCard(
     story: Story,
+    language: String, // Added language parameter
     onClick: () -> Unit,
     onFavoriteClick: () -> Unit
 ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        onClick = onClick
+            // .padding(vertical = 4.dp) // Padding is handled by LazyColumn's spacedBy
+            .clickable(onClick = onClick), // Make the whole card clickable
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+        // onClick = onClick // Material 3 Card's onClick is for an action within the card, not navigation typically
     ) {
-        Column(
+        Row( // Use Row for better alignment of favorite icon
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = story.title,
-                fontSize = 20.sp,
-                style = MaterialTheme.typography.titleLarge
+                text = getLocalizedTitle(story, language), // Use localized title
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.weight(1f) // Text takes available space
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Removed content snippet:
+            // Spacer(modifier = Modifier.height(8.dp))
+            // Text(
+            //     text = story.content.take(100) + "...", // This was causing an error as 'content' doesn't exist
+            //     style = MaterialTheme.typography.bodyMedium
+            // )
+            // Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = story.content.take(100) + "...",
-                style = MaterialTheme.typography.bodyMedium
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
                 IconButton(
                     onClick = onFavoriteClick
                 ) {
@@ -366,9 +483,9 @@ fun StoryCard(
                             Icons.Filled.Favorite
                         else
                             Icons.Outlined.FavoriteBorder,
-                        contentDescription = "Favorite"
+                    contentDescription = "Favorite",
+                    tint = if (story.isFavorite) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = ContentAlpha.medium)
                     )
-                }
             }
         }
     }
@@ -383,27 +500,91 @@ fun SearchBar(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier,
+        modifier = modifier.fillMaxWidth(), // Make search bar take full width
         placeholder = { Text("Search stories...") },
         leadingIcon = {
             Icon(
-                imageVector = Icons.Default.Search,
+                imageVector = Icons.Default.Search, // Or Icons.Filled.Search
                 contentDescription = "Search"
             )
         },
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(
-            onSearch = { /* Handle search action */ }
+            onSearch = { /* TODO: Handle search action, e.g., hide keyboard, filter list */ }
         )
     )
 }
 
+// Theme definition - ensure this is appropriately customized if needed
 @Composable
 fun KidsStoryBookTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme,
-        typography = MaterialTheme.typography,
+        colorScheme = MaterialTheme.colorScheme, // Replace with your custom ColorScheme if any
+        typography = MaterialTheme.typography,   // Replace with your custom Typography if any
         content = content
     )
 } 
+
+data class Story(
+    val id: Int,
+    val englishTitle: String,
+    val arabicTitle: String,
+    val turkishTitle: String,
+    val englishImagePaths: List<String> = emptyList(),
+    val arabicImagePaths: List<String> = emptyList(),
+    val turkishImagePaths: List<String> = emptyList(),
+    val englishAudioPath: String? = null,
+    val arabicAudioPath: String? = null,
+    val turkishAudioPath: String? = null,
+    var isFavorite: Boolean = false // Added for favorite functionality
+)
+
+fun getLocalizedTitle(story: Story, language: String): String {
+    return when (language) {
+        "ar" -> story.arabicTitle
+        "en" -> story.englishTitle
+        "tr" -> story.turkishTitle
+        else -> story.englishTitle // Default to English
+    }
+}
+
+fun getStories(): List<Story> {
+    return listOf(
+        Story(
+            id = 1,
+            englishTitle = "The Lion and the Mouse",
+            arabicTitle = "الاسد والفار",
+            turkishTitle = "Aslan ve Fare",
+            englishImagePaths = listOf("stories/lion_mouse/en/img_1.jpg", "stories/lion_mouse/en/img_2.jpg", "stories/lion_mouse/en/img_3.jpg", "stories/lion_mouse/en/img_4.jpg", "stories/lion_mouse/en/img_5.jpg", "stories/lion_mouse/en/img_6.jpg", "stories/lion_mouse/en/img_7.jpg"),
+            arabicImagePaths = listOf("stories/lion_mouse/ar/img_1.jpg", "stories/lion_mouse/ar/img_2.jpg", "stories/lion_mouse/ar/img_3.jpg", "stories/lion_mouse/ar/img_4.jpg", "stories/lion_mouse/ar/img_5.jpg", "stories/lion_mouse/ar/img_6.jpg", "stories/lion_mouse/ar/img_7.jpg"),
+            turkishImagePaths = listOf("stories/lion_mouse/tr/img_1.jpg", "stories/lion_mouse/tr/img_2.jpg", "stories/lion_mouse/tr/img_3.jpg", "stories/lion_mouse/tr/img_4.jpg", "stories/lion_mouse/tr/img_5.jpg", "stories/lion_mouse/tr/img_6.jpg", "stories/lion_mouse/tr/img_7.jpg"),
+            englishAudioPath = "stories/lion_mouse/en/audio.wav",
+            arabicAudioPath = "stories/lion_mouse/ar/audio.wav",
+            turkishAudioPath = "stories/lion_mouse/tr/audio.wav",
+            isFavorite = false // Explicitly set, though default is false
+        ),
+        Story(
+            id = 2,
+            englishTitle = "The Fox and the Crow",
+            arabicTitle = "الثعلب والغراب",
+            turkishTitle = "Tilki ve Karga",
+            englishImagePaths = listOf("stories/fox_crow/en/img_awal.png", "stories/fox_crow/en/img_1.png", "stories/fox_crow/en/img_2.png", "stories/fox_crow/en/img_3.png", "stories/fox_crow/en/img_4.png", "stories/fox_crow/en/img_5.png"),
+            arabicImagePaths = listOf("stories/fox_crow/ar/img_awal.png", "stories/fox_crow/ar/img_1.png", "stories/fox_crow/ar/img_2.png", "stories/fox_crow/ar/img_3.png", "stories/fox_crow/ar/img_4.png", "stories/fox_crow/ar/img_5.png"),
+            turkishImagePaths = listOf("stories/fox_crow/tr/img_awal.png", "stories/fox_crow/tr/img_1.png", "stories/fox_crow/tr/img_2.png", "stories/fox_crow/tr/img_3.png", "stories/fox_crow/tr/img_4.png", "stories/fox_crow/tr/img_5.png"),
+            englishAudioPath = "stories/fox_crow/en/audio.wav",
+            arabicAudioPath = "stories/fox_crow/ar/audio.wav",
+            turkishAudioPath = "stories/fox_crow/tr/audio.wav",
+            isFavorite = false
+        )
+    )
+}
+
+fun getLanguageTitle(language: String): String {
+    return when (language) {
+        "ar" -> "قصص باللغة العربية" // More descriptive
+        "en" -> "English Stories"
+        "tr" -> "Türkçe Hikayeler"
+        else -> "Stories"
+    }
+}
